@@ -125,6 +125,6 @@ jobs:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
           push: false
-          tags: ghcr.io/${{ github.repository_owner }}/neuralops/${{ matrix.name }}:pr-${{ github.event.number }}
+          tags: ghcr.io/aashish-chandr/neuralops/${{ matrix.name }}:pr-${{ github.event.number }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

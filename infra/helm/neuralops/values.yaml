@@ -1,5 +1,5 @@
 global:
-  registry: ghcr.io/Aashish-Chandr/neuralops
+  registry: ghcr.io/aashish-chandr/neuralops
   tag: latest
   namespace: neuralops
 
