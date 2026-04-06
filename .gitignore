@@ -11,9 +11,10 @@ build/
 .mypy_cache/
 mlruns/
 mlflow.db
-ml/artifacts/
-*.pt
-*.pth
+ml/artifacts/*.pt
+ml/artifacts/*.pth
+ml/artifacts/best_model.pt
+# keep artifacts/ dir and norm_stats/threshold json (small, useful to commit)
 reports/
 *.html
 .terraform/

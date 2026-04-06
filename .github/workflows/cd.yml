@@ -3,6 +3,10 @@ name: CD — Build, Push, Deploy
 on:
   push:
     branches: [main]
+    # skip if the only change is the helm values auto-commit
+    paths-ignore:
+      - "infra/helm/neuralops/values.yaml"
+      - "**.md"
 
 env:
   REGISTRY: ghcr.io
@@ -18,23 +22,30 @@ jobs:
       matrix:
         include:
           - name: inference-server
-            context: ml
+            context: .
             dockerfile: ml/Dockerfile
+
           - name: metrics-exporter
             context: streaming
             dockerfile: streaming/Dockerfile
+
           - name: remediation-engine
             context: remediation
             dockerfile: remediation/Dockerfile
+
+          # drift needs ml/ files — build from repo root
           - name: drift-detector
-            context: drift
-            dockerfile: drift/Dockerfile
+            context: .
+            dockerfile: drift/Dockerfile.ci
+
           - name: frontend
             context: frontend
             dockerfile: frontend/Dockerfile
+
           - name: api-gateway
             context: frontend/api-gateway
             dockerfile: frontend/api-gateway/Dockerfile
+
     steps:
       - uses: actions/checkout@v4
 
@@ -72,13 +83,12 @@ jobs:
 
       - name: Update image tags in Helm values
         run: |
-          SHA=${{ github.sha }}
-          sed -i "s|tag: .*|tag: ${SHA}|g" infra/helm/neuralops/values.yaml
+          sed -i "s|tag: .*|tag: ${{ github.sha }}|g" infra/helm/neuralops/values.yaml
 
       - name: Commit updated values
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add infra/helm/neuralops/values.yaml
-          git commit -m "chore: update image tags to ${{ github.sha }} [skip ci]" || echo "No changes"
+          git diff --staged --quiet || git commit -m "chore: bump image tags to ${{ github.sha }} [skip ci]"
           git push

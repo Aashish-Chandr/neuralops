@@ -63,6 +63,8 @@ jobs:
       - name: Build
         run: npm run build
         working-directory: frontend
+        env:
+          VITE_API_URL: ""   # empty string is fine for CI build check
 
   integration-tests:
     runs-on: ubuntu-latest
@@ -94,7 +96,7 @@ jobs:
       matrix:
         include:
           - name: inference-server
-            context: ml
+            context: .
             dockerfile: ml/Dockerfile
           - name: metrics-exporter
             context: streaming
@@ -103,8 +105,8 @@ jobs:
             context: remediation
             dockerfile: remediation/Dockerfile
           - name: drift-detector
-            context: drift
-            dockerfile: drift/Dockerfile
+            context: .
+            dockerfile: drift/Dockerfile.ci
           - name: frontend
             context: frontend
             dockerfile: frontend/Dockerfile

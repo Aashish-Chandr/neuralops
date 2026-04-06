@@ -208,7 +208,9 @@ services:
 
   # ── Inference Server ─────────────────────────────────────────────────────
   inference-server:
-    build: ml
+    build:
+      context: .
+      dockerfile: ml/Dockerfile
     ports: ["8080:8080"]
     depends_on:
       kafka:
@@ -226,7 +228,9 @@ services:
 
   # ── Remediation Engine ───────────────────────────────────────────────────
   remediation-engine:
-    build: remediation
+    build:
+      context: .
+      dockerfile: remediation/Dockerfile
     depends_on:
       kafka:
         condition: service_healthy

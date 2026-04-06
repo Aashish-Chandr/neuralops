@@ -1,19 +1,23 @@
 FROM python:3.10-slim
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY ml/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt supervisor
 
-COPY model.py inference_server.py kafka_consumer.py ./
-COPY artifacts/ ./artifacts/
+COPY ml/model.py ml/inference_server.py ml/kafka_consumer.py ml/supervisord.conf ./
 
-ENV MLFLOW_TRACKING_URI=http://mlflow:5000
-ENV KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-ENV INFERENCE_SERVER_URL=http://localhost:8080
+# artifacts/ (threshold.json, norm_stats.json, best_model.pt) are optional at build time.
+# If missing, the inference server falls back to defaults on startup.
+# In production, mount them as a volume or bake them in after training.
+COPY ml/artifacts/ ./artifacts/
 
-# Start both inference server and kafka consumer via supervisord
-RUN pip install supervisor
-COPY supervisord.conf /etc/supervisord.conf
+ENV MLFLOW_TRACKING_URI=""
+ENV KAFKA_BOOTSTRAP_SERVERS="localhost:9092"
+ENV KAFKA_SASL_USERNAME=""
+ENV KAFKA_SASL_PASSWORD=""
+ENV MODEL_NAME=neuralops-lstm-autoencoder
+ENV MODEL_STAGE=Production
 
-EXPOSE 8080
+COPY ml/supervisord.conf /etc/supervisord.conf
+
 CMD ["supervisord", "-c", "/etc/supervisord.conf"]
