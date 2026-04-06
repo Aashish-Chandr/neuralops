@@ -1,0 +1,74 @@
+version: "3.9"
+
+x-service-defaults: &service-defaults
+  build:
+    context: .
+    dockerfile: Dockerfile.template
+  restart: unless-stopped
+  networks:
+    - neuralops
+
+services:
+  user-service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile.template
+      args:
+        SERVICE_DIR: user-service
+    ports:
+      - "8001:8000"
+    environment:
+      - CHAOS_MODE=${CHAOS_USER:-false}
+
+  order-service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile.template
+      args:
+        SERVICE_DIR: order-service
+    ports:
+      - "8002:8000"
+    environment:
+      - CHAOS_MODE=${CHAOS_ORDER:-false}
+
+  payment-service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile.template
+      args:
+        SERVICE_DIR: payment-service
+    ports:
+      - "8003:8000"
+    environment:
+      - CHAOS_MODE=${CHAOS_PAYMENT:-false}
+
+  inventory-service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile.template
+      args:
+        SERVICE_DIR: inventory-service
+    ports:
+      - "8004:8000"
+    environment:
+      - CHAOS_MODE=${CHAOS_INVENTORY:-false}
+
+  notification-service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile.template
+      args:
+        SERVICE_DIR: notification-service
+    ports:
+      - "8005:8000"
+    environment:
+      - CHAOS_MODE=${CHAOS_NOTIFICATION:-false}
+
+networks:
+  neuralops:
+    driver: bridge

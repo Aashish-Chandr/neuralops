@@ -1,0 +1,90 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: inference-server
+  namespace: neuralops
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: inference-server
+  template:
+    metadata:
+      labels:
+        app: inference-server
+    spec:
+      containers:
+        - name: inference-server
+          image: ghcr.io/Aashish-Chandr/neuralops/inference-server:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: MLFLOW_TRACKING_URI
+              value: http://mlflow:5000
+            - name: MODEL_NAME
+              value: neuralops-lstm-autoencoder
+            - name: MODEL_STAGE
+              value: Production
+          livenessProbe:
+            httpGet: { path: /health, port: 8080 }
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          readinessProbe:
+            httpGet: { path: /health, port: 8080 }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests: { cpu: "200m", memory: "512Mi" }
+            limits:   { cpu: "1000m", memory: "1Gi" }
+
+  strategy:
+    canary:
+      # Step 1: send 10% of traffic to canary, run analysis
+      # Step 2: if analysis passes, promote to 50%
+      # Step 3: full promotion
+      steps:
+        - setWeight: 10
+        - analysis:
+            templates:
+              - templateName: inference-server-canary-analysis
+            args:
+              - name: service-name
+                value: inference-server
+        - pause: { duration: 2m }
+        - setWeight: 50
+        - pause: { duration: 2m }
+        - setWeight: 100
+
+      canaryService: inference-server-canary
+      stableService: inference-server-stable
+
+      trafficRouting:
+        nginx:
+          stableIngress: inference-server-ingress
+---
+# Stable service (receives 90% → 50% → 0% during rollout)
+apiVersion: v1
+kind: Service
+metadata:
+  name: inference-server-stable
+  namespace: neuralops
+spec:
+  selector:
+    app: inference-server
+  ports:
+    - port: 8080
+      targetPort: 8080
+---
+# Canary service (receives 10% → 50% → 100% during rollout)
+apiVersion: v1
+kind: Service
+metadata:
+  name: inference-server-canary
+  namespace: neuralops
+spec:
+  selector:
+    app: inference-server
+  ports:
+    - port: 8080
+      targetPort: 8080
+

@@ -1,0 +1,24 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: neuralops-staging
+  namespace: argocd
+spec:
+  project: neuralops
+  source:
+    repoURL: https://github.com/Aashish-Chandr/neuralops
+    targetRevision: main
+    path: infra/helm/neuralops
+    helm:
+      valueFiles:
+        - values-staging.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: neuralops-staging
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+

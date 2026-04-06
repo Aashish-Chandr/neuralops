@@ -1,0 +1,21 @@
+# Usage: copy this into each service folder and set SERVICE_DIR
+FROM python:3.10-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy shared base
+COPY base_service.py .
+
+# Copy service code (override SERVICE_DIR at build time)
+ARG SERVICE_DIR
+COPY ${SERVICE_DIR}/main.py .
+
+ENV CHAOS_MODE=false
+ENV PORT=8000
+
+EXPOSE 8000
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

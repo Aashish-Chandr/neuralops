@@ -1,0 +1,41 @@
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: payment-pod-delete
+  namespace: neuralops
+spec:
+  appinfo:
+    appns: neuralops
+    applabel: "app=payment-service"
+    appkind: deployment
+  chaosServiceAccount: litmus-admin
+  monitoring: true
+  jobCleanUpPolicy: retain
+  experiments:
+    - name: pod-delete
+      spec:
+        components:
+          env:
+            - name: TOTAL_CHAOS_DURATION
+              value: "60"          # seconds
+            - name: CHAOS_INTERVAL
+              value: "10"          # delete a pod every 10s
+            - name: FORCE
+              value: "false"
+            - name: TARGET_PODS
+              value: ""            # empty = random pod
+        probe:
+          - name: payment-health-check
+            type: httpProbe
+            httpProbe/inputs:
+              url: http://payment-service:8000/health
+              insecureSkipVerify: false
+              method:
+                get:
+                  criteria: ==
+                  responseCode: "200"
+            mode: Continuous
+            runProperties:
+              probeTimeout: 5
+              interval: 5
+              retry: 3

@@ -1,0 +1,27 @@
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.env
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+mlruns/
+mlflow.db
+ml/artifacts/
+*.pt
+*.pth
+reports/
+*.html
+.terraform/
+*.tfstate
+*.tfstate.backup
+.terraform.lock.hcl
+grafana-data/
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local

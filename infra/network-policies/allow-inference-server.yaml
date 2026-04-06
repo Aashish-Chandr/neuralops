@@ -1,0 +1,45 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-inference-server
+  namespace: neuralops
+spec:
+  podSelector:
+    matchLabels:
+      app: inference-server
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Accept predictions from kafka-consumer (same pod via localhost — no network policy needed)
+    # Accept health checks from Prometheus
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - port: 8080
+    # Accept from within neuralops namespace (e.g. remediation engine verify calls)
+    - from:
+        - podSelector: {}
+      ports:
+        - port: 8080
+  egress:
+    # Talk to Kafka
+    - to:
+        - podSelector:
+            matchLabels:
+              app: kafka
+      ports:
+        - port: 9092
+    # Talk to MLflow
+    - to:
+        - podSelector:
+            matchLabels:
+              app: mlflow
+      ports:
+        - port: 5000
+    # DNS
+    - ports:
+        - port: 53
+          protocol: UDP

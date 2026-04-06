@@ -1,0 +1,48 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: inference-server-canary-analysis
+  namespace: neuralops
+spec:
+  args:
+    - name: service-name
+  metrics:
+    # Metric 1: error rate must stay below 5%
+    - name: error-rate
+      interval: 60s
+      count: 5
+      successCondition: result[0] < 0.05
+      failureLimit: 2
+      provider:
+        prometheus:
+          address: http://prometheus-server.monitoring:9090
+          query: |
+            sum(rate(http_requests_total{service="inference-server",status=~"5.."}[2m]))
+            /
+            sum(rate(http_requests_total{service="inference-server"}[2m]))
+
+    # Metric 2: p99 latency must stay below 500ms
+    - name: latency-p99
+      interval: 60s
+      count: 5
+      successCondition: result[0] < 0.5
+      failureLimit: 2
+      provider:
+        prometheus:
+          address: http://prometheus-server.monitoring:9090
+          query: |
+            histogram_quantile(0.99,
+              rate(http_request_duration_seconds_bucket{service="inference-server"}[2m])
+            )
+
+    # Metric 3: anomaly detection F1 must not degrade
+    # (custom metric pushed by the retrain pipeline)
+    - name: model-f1-score
+      interval: 120s
+      count: 3
+      successCondition: result[0] >= 0.7
+      failureLimit: 1
+      provider:
+        prometheus:
+          address: http://prometheus-server.monitoring:9090
+          query: mlflow_model_f1_score{stage="canary"}

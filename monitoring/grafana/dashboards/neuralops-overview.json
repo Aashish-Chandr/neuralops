@@ -1,0 +1,133 @@
+{
+  "title": "NeuralOps — System Overview",
+  "uid": "neuralops-overview",
+  "schemaVersion": 38,
+  "refresh": "15s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1, "type": "row",
+      "title": "Microservice Health",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 }
+    },
+    {
+      "id": 2, "type": "timeseries",
+      "title": "CPU Usage % by Service",
+      "gridPos": { "x": 0, "y": 1, "w": 12, "h": 8 },
+      "targets": [{
+        "expr": "cpu_usage_percent",
+        "legendFormat": "{{service}}"
+      }],
+      "fieldConfig": {
+        "defaults": { "unit": "percent", "min": 0, "max": 100,
+          "thresholds": { "steps": [
+            {"color": "green", "value": 0},
+            {"color": "yellow", "value": 60},
+            {"color": "red", "value": 80}
+          ]}
+        }
+      }
+    },
+    {
+      "id": 3, "type": "timeseries",
+      "title": "Memory Usage % by Service",
+      "gridPos": { "x": 12, "y": 1, "w": 12, "h": 8 },
+      "targets": [{
+        "expr": "memory_usage_percent",
+        "legendFormat": "{{service}}"
+      }],
+      "fieldConfig": {
+        "defaults": { "unit": "percent", "min": 0, "max": 100 }
+      }
+    },
+    {
+      "id": 4, "type": "timeseries",
+      "title": "Request Latency P99 (ms)",
+      "gridPos": { "x": 0, "y": 9, "w": 12, "h": 8 },
+      "targets": [{
+        "expr": "histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[1m])) * 1000",
+        "legendFormat": "{{service}}"
+      }],
+      "fieldConfig": { "defaults": { "unit": "ms" } }
+    },
+    {
+      "id": 5, "type": "timeseries",
+      "title": "Error Rate % by Service",
+      "gridPos": { "x": 12, "y": 9, "w": 12, "h": 8 },
+      "targets": [{
+        "expr": "error_rate_percent",
+        "legendFormat": "{{service}}"
+      }],
+      "fieldConfig": {
+        "defaults": { "unit": "percent",
+          "thresholds": { "steps": [
+            {"color": "green", "value": 0},
+            {"color": "yellow", "value": 5},
+            {"color": "red", "value": 15}
+          ]}
+        }
+      }
+    },
+    {
+      "id": 6, "type": "row",
+      "title": "ML Anomaly Detection",
+      "gridPos": { "x": 0, "y": 17, "w": 24, "h": 1 }
+    },
+    {
+      "id": 7, "type": "timeseries",
+      "title": "Anomaly Score by Service",
+      "gridPos": { "x": 0, "y": 18, "w": 16, "h": 8 },
+      "targets": [{
+        "expr": "anomaly_score",
+        "legendFormat": "{{service}}"
+      }],
+      "fieldConfig": {
+        "defaults": { "unit": "short" },
+        "overrides": [{
+          "matcher": { "id": "byName", "options": "threshold" },
+          "properties": [{ "id": "custom.lineStyle", "value": { "dash": [10, 10] } }]
+        }]
+      }
+    },
+    {
+      "id": 8, "type": "stat",
+      "title": "Total Anomalies Detected",
+      "gridPos": { "x": 16, "y": 18, "w": 8, "h": 4 },
+      "targets": [{
+        "expr": "sum(anomalies_detected_total)",
+        "legendFormat": "Total"
+      }],
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [
+            {"color": "green", "value": 0},
+            {"color": "red", "value": 1}
+          ]}
+        }
+      }
+    },
+    {
+      "id": 9, "type": "stat",
+      "title": "Predictions / min",
+      "gridPos": { "x": 16, "y": 22, "w": 8, "h": 4 },
+      "targets": [{
+        "expr": "rate(predictions_total[1m]) * 60",
+        "legendFormat": "pred/min"
+      }]
+    },
+    {
+      "id": 10, "type": "row",
+      "title": "Auto-Remediation",
+      "gridPos": { "x": 0, "y": 26, "w": 24, "h": 1 }
+    },
+    {
+      "id": 11, "type": "logs",
+      "title": "Remediation Audit Log",
+      "gridPos": { "x": 0, "y": 27, "w": 24, "h": 8 },
+      "targets": [{
+        "expr": "{app=\"remediation-engine\"}",
+        "legendFormat": ""
+      }]
+    }
+  ]
+}

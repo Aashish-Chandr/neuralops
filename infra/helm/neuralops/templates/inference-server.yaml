@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inference-server
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: inference-server
+spec:
+  replicas: {{ .Values.inferenceServer.replicas }}
+  selector:
+    matchLabels:
+      app: inference-server
+  template:
+    metadata:
+      labels:
+        app: inference-server
+    spec:
+      containers:
+        - name: inference-server
+          image: {{ .Values.inferenceServer.image.repository }}:{{ .Values.inferenceServer.image.tag }}
+          ports:
+            - containerPort: {{ .Values.inferenceServer.port }}
+          env:
+            - name: MLFLOW_TRACKING_URI
+              value: {{ .Values.mlflow.trackingUri }}
+            - name: MODEL_NAME
+              value: {{ .Values.mlflow.modelName }}
+            - name: MODEL_STAGE
+              value: {{ .Values.mlflow.modelStage }}
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: {{ .Values.kafka.bootstrapServers }}
+            - name: KAFKA_METRICS_TOPIC
+              value: {{ .Values.kafka.metricsTopic }}
+            - name: KAFKA_ALERTS_TOPIC
+              value: {{ .Values.kafka.alertsTopic }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.inferenceServer.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: inference-server
+  namespace: {{ .Values.global.namespace }}
+spec:
+  selector:
+    app: inference-server
+  ports:
+    - port: {{ .Values.inferenceServer.port }}
+      targetPort: {{ .Values.inferenceServer.port }}

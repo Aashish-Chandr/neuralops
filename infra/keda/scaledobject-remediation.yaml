@@ -1,0 +1,22 @@
+# KEDA ScaledObject: scale remediation-engine based on anomaly-alerts queue depth
+# During an incident with many services failing, spin up more remediation workers
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: remediation-engine-scaler
+  namespace: neuralops
+spec:
+  scaleTargetRef:
+    name: remediation-engine
+  minReplicaCount: 1
+  maxReplicaCount: 4
+  cooldownPeriod: 120
+  pollingInterval: 10
+  triggers:
+    - type: kafka
+      metadata:
+        bootstrapServers: kafka.neuralops:9092
+        consumerGroup: remediation-engine
+        topic: anomaly-alerts
+        lagThreshold: "5"           # scale up when >5 unprocessed alerts per replica
+        offsetResetPolicy: latest

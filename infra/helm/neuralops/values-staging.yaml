@@ -1,0 +1,19 @@
+# Staging overrides — production-like but smaller scale
+global:
+  tag: latest
+
+services:
+  userService:
+    replicas: 2
+  paymentService:
+    replicas: 2
+
+inferenceServer:
+  replicas: 2
+
+remediationEngine:
+  replicas: 1
+
+driftDetector:
+  schedule: "0 6 * * *"   # daily at 6 AM
+  driftThreshold: "0.3"

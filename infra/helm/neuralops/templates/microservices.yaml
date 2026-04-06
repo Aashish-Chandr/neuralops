@@ -1,0 +1,66 @@
+{{- $services := dict
+  "user-service"         (dict "port" .Values.services.userService.port         "chaos" .Values.services.userService.chaosMode         "replicas" .Values.services.userService.replicas)
+  "order-service"        (dict "port" .Values.services.orderService.port        "chaos" .Values.services.orderService.chaosMode        "replicas" .Values.services.orderService.replicas)
+  "payment-service"      (dict "port" .Values.services.paymentService.port      "chaos" .Values.services.paymentService.chaosMode      "replicas" .Values.services.paymentService.replicas)
+  "inventory-service"    (dict "port" .Values.services.inventoryService.port    "chaos" .Values.services.inventoryService.chaosMode    "replicas" .Values.services.inventoryService.replicas)
+  "notification-service" (dict "port" .Values.services.notificationService.port "chaos" .Values.services.notificationService.chaosMode "replicas" .Values.services.notificationService.replicas)
+-}}
+{{- range $name, $cfg := $services }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Values.global.namespace }}
+  labels:
+    app: {{ $name }}
+spec:
+  replicas: {{ $cfg.replicas }}
+  selector:
+    matchLabels:
+      app: {{ $name }}
+  template:
+    metadata:
+      labels:
+        app: {{ $name }}
+    spec:
+      containers:
+        - name: {{ $name }}
+          image: {{ $.Values.global.registry }}/{{ $name }}:{{ $.Values.global.tag }}
+          ports:
+            - containerPort: {{ $cfg.port }}
+          env:
+            - name: CHAOS_MODE
+              value: "{{ $cfg.chaos }}"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ $cfg.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ $cfg.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Values.global.namespace }}
+spec:
+  selector:
+    app: {{ $name }}
+  ports:
+    - port: {{ $cfg.port }}
+      targetPort: {{ $cfg.port }}
+{{- end }}

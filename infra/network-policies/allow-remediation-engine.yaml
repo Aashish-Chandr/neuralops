@@ -1,0 +1,43 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-remediation-engine
+  namespace: neuralops
+spec:
+  podSelector:
+    matchLabels:
+      app: remediation-engine
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress: []   # remediation engine receives no inbound traffic
+  egress:
+    # Consume from Kafka
+    - to:
+        - podSelector:
+            matchLabels:
+              app: kafka
+      ports:
+        - port: 9092
+    # Call Kubernetes API server
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - port: 443
+    # Health check calls to microservices
+    - to:
+        - podSelector: {}
+      ports:
+        - port: 8000
+    # Slack webhook (HTTPS egress)
+    - ports:
+        - port: 443
+    # DNS
+    - ports:
+        - port: 53
+          protocol: UDP

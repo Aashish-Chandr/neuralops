@@ -1,0 +1,128 @@
+name: CI — Test, Lint, Build
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        component: [services, ml, streaming, remediation, drift]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          pip install flake8 pytest
+          if [ -f ${{ matrix.component }}/requirements.txt ]; then
+            pip install -r ${{ matrix.component }}/requirements.txt
+          fi
+
+      - name: Lint with flake8
+        run: |
+          flake8 ${{ matrix.component }}/ \
+            --max-line-length=120 \
+            --exclude=__pycache__,.venv \
+            --ignore=E501,W503
+
+      - name: Run tests
+        run: |
+          if [ -d ${{ matrix.component }}/tests ]; then
+            pytest ${{ matrix.component }}/tests/ -v
+          else
+            echo "No tests directory for ${{ matrix.component }} — skipping"
+          fi
+
+  frontend-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: frontend
+
+      - name: TypeScript type check
+        run: npx tsc -b --noEmit
+        working-directory: frontend
+
+      - name: Build
+        run: npm run build
+        working-directory: frontend
+
+  integration-tests:
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install all test dependencies
+        run: |
+          pip install pytest torch numpy kafka-python kubernetes requests
+          pip install -r ml/requirements.txt
+          pip install -r remediation/requirements.txt
+
+      - name: Generate training data
+        run: python scripts/generate_training_data.py
+
+      - name: Run integration + E2E tests
+        run: pytest tests/ -v --timeout=120
+
+  build-images:
+    runs-on: ubuntu-latest
+    needs: [lint-and-test, frontend-check]
+    strategy:
+      matrix:
+        include:
+          - name: inference-server
+            context: ml
+            dockerfile: ml/Dockerfile
+          - name: metrics-exporter
+            context: streaming
+            dockerfile: streaming/Dockerfile
+          - name: remediation-engine
+            context: remediation
+            dockerfile: remediation/Dockerfile
+          - name: drift-detector
+            context: drift
+            dockerfile: drift/Dockerfile
+          - name: frontend
+            context: frontend
+            dockerfile: frontend/Dockerfile
+          - name: api-gateway
+            context: frontend/api-gateway
+            dockerfile: frontend/api-gateway/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image (no push on PR)
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: false
+          tags: ghcr.io/${{ github.repository_owner }}/neuralops/${{ matrix.name }}:pr-${{ github.event.number }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

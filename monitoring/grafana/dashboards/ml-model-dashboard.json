@@ -1,0 +1,117 @@
+{
+  "title": "NeuralOps — ML Model Performance",
+  "uid": "neuralops-ml-model",
+  "schemaVersion": 38,
+  "refresh": "15s",
+  "time": { "from": "now-3h", "to": "now" },
+  "panels": [
+    {
+      "id": 1, "type": "timeseries",
+      "title": "Anomaly Score vs Threshold — All Services",
+      "description": "When score crosses the dashed threshold line, an alert fires.",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 10 },
+      "targets": [
+        {
+          "expr": "anomaly_score",
+          "legendFormat": "score — {{service}}"
+        },
+        {
+          "expr": "0.05",
+          "legendFormat": "threshold",
+          "hide": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short", "min": 0 },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "threshold" },
+            "properties": [
+              { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [8, 8] } },
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } },
+              { "id": "custom.lineWidth", "value": 2 }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 2, "type": "stat",
+      "title": "Anomalies Detected (1h)",
+      "gridPos": { "x": 0, "y": 10, "w": 6, "h": 4 },
+      "targets": [{ "expr": "increase(anomalies_detected_total[1h])", "legendFormat": "{{service}}" }],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{"color":"green","value":0},{"color":"red","value":1}] }
+        }
+      }
+    },
+    {
+      "id": 3, "type": "stat",
+      "title": "Predictions / min",
+      "gridPos": { "x": 6, "y": 10, "w": 6, "h": 4 },
+      "targets": [{ "expr": "rate(predictions_total[1m]) * 60" }]
+    },
+    {
+      "id": 4, "type": "gauge",
+      "title": "Max Anomaly Score (live)",
+      "gridPos": { "x": 12, "y": 10, "w": 6, "h": 4 },
+      "targets": [{ "expr": "max(anomaly_score)" }],
+      "fieldConfig": {
+        "defaults": {
+          "min": 0, "max": 0.2,
+          "thresholds": { "steps": [
+            {"color":"green","value":0},
+            {"color":"yellow","value":0.03},
+            {"color":"red","value":0.05}
+          ]}
+        }
+      }
+    },
+    {
+      "id": 5, "type": "stat",
+      "title": "Services in Anomaly State",
+      "gridPos": { "x": 18, "y": 10, "w": 6, "h": 4 },
+      "targets": [{ "expr": "count(anomaly_score > 0.05)" }],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{"color":"green","value":0},{"color":"red","value":1}] }
+        }
+      }
+    },
+    {
+      "id": 6, "type": "timeseries",
+      "title": "Anomaly Score — payment-service (demo focus)",
+      "gridPos": { "x": 0, "y": 14, "w": 16, "h": 8 },
+      "targets": [
+        { "expr": "anomaly_score{service=\"payment-service\"}", "legendFormat": "anomaly score" },
+        { "expr": "0.05", "legendFormat": "threshold" }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short" },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "threshold" },
+            "properties": [
+              { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [8, 8] } },
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 7, "type": "table",
+      "title": "Top Anomalous Services (last 15m)",
+      "gridPos": { "x": 16, "y": 14, "w": 8, "h": 8 },
+      "targets": [{
+        "expr": "topk(5, max_over_time(anomaly_score[15m]))",
+        "legendFormat": "{{service}}",
+        "instant": true
+      }],
+      "transformations": [{ "id": "sortBy", "options": { "fields": [{"displayName":"Value","desc":true}] } }]
+    }
+  ]
+}

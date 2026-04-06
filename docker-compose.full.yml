@@ -1,0 +1,281 @@
+version: "3.9"
+
+# Full NeuralOps stack for local development
+# Usage: docker-compose -f docker-compose.full.yml up --build
+# Quick start: make dev
+
+x-healthcheck-defaults: &hc-defaults
+  interval: 10s
+  timeout: 5s
+  retries: 10
+  start_period: 20s
+
+services:
+  # ── Zookeeper ────────────────────────────────────────────────────────────
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.1
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo ruok | nc localhost 2181 | grep imok"]
+      <<: *hc-defaults
+    networks: [neuralops]
+
+  # ── Kafka ─────────────────────────────────────────────────────────────────
+  kafka:
+    image: confluentinc/cp-kafka:7.6.1
+    ports: ["9092:9092"]
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_LOG_RETENTION_HOURS: 24
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      <<: *hc-defaults
+    networks: [neuralops]
+
+  # ── Kafka topic provisioner (runs once then exits) ────────────────────────
+  kafka-init:
+    image: confluentinc/cp-kafka:7.6.1
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-c"]
+    command: |
+      "
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:9092 --topic metrics-stream --partitions 3 --replication-factor 1
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:9092 --topic anomaly-alerts --partitions 1 --replication-factor 1
+      echo 'Topics created.'
+      "
+    networks: [neuralops]
+
+  # ── MLflow ───────────────────────────────────────────────────────────────
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.12.2
+    ports: ["5000:5000"]
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri sqlite:////mlflow/mlflow.db
+      --default-artifact-root /mlflow/artifacts
+    volumes:
+      - mlflow-data:/mlflow
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      <<: *hc-defaults
+    networks: [neuralops]
+
+  # ── Prometheus ───────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.51.2
+    ports: ["9090:9090"]
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/rules:/etc/prometheus/rules:ro
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=7d
+      - --web.enable-lifecycle
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--tries=1", "-O-", "http://localhost:9090/-/healthy"]
+      <<: *hc-defaults
+    networks: [neuralops]
+
+  # ── Alertmanager ─────────────────────────────────────────────────────────
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    ports: ["9093:9093"]
+    volumes:
+      - ./monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    networks: [neuralops]
+
+  # ── Loki ─────────────────────────────────────────────────────────────────
+  loki:
+    image: grafana/loki:2.9.7
+    ports: ["3100:3100"]
+    volumes:
+      - ./monitoring/loki/loki-config.yaml:/etc/loki/local-config.yaml:ro
+      - loki-data:/tmp/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --tries=1 -O- http://localhost:3100/ready || exit 1"]
+      <<: *hc-defaults
+    networks: [neuralops]
+
+  # ── Promtail ─────────────────────────────────────────────────────────────
+  promtail:
+    image: grafana/promtail:2.9.7
+    volumes:
+      - ./monitoring/loki/promtail-config.yaml:/etc/promtail/config.yaml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: -config.file=/etc/promtail/config.yaml
+    depends_on:
+      loki:
+        condition: service_healthy
+    networks: [neuralops]
+
+  # ── Grafana ──────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.4.2
+    ports: ["3000:3000"]
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=neuralops-admin
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/var/lib/grafana/dashboards/neuralops-overview.json
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      loki:
+        condition: service_healthy
+    networks: [neuralops]
+
+  # ── Microservices ────────────────────────────────────────────────────────
+  user-service:
+    build: { context: services, dockerfile: Dockerfile.template, args: { SERVICE_DIR: user-service } }
+    ports: ["8001:8000"]
+    environment: [CHAOS_MODE=${CHAOS_USER:-false}]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      <<: *hc-defaults
+    networks: [neuralops]
+
+  order-service:
+    build: { context: services, dockerfile: Dockerfile.template, args: { SERVICE_DIR: order-service } }
+    ports: ["8002:8000"]
+    environment: [CHAOS_MODE=${CHAOS_ORDER:-false}]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      <<: *hc-defaults
+    networks: [neuralops]
+
+  payment-service:
+    build: { context: services, dockerfile: Dockerfile.template, args: { SERVICE_DIR: payment-service } }
+    ports: ["8003:8000"]
+    environment: [CHAOS_MODE=${CHAOS_PAYMENT:-false}]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      <<: *hc-defaults
+    networks: [neuralops]
+
+  inventory-service:
+    build: { context: services, dockerfile: Dockerfile.template, args: { SERVICE_DIR: inventory-service } }
+    ports: ["8004:8000"]
+    environment: [CHAOS_MODE=${CHAOS_INVENTORY:-false}]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      <<: *hc-defaults
+    networks: [neuralops]
+
+  notification-service:
+    build: { context: services, dockerfile: Dockerfile.template, args: { SERVICE_DIR: notification-service } }
+    ports: ["8005:8000"]
+    environment: [CHAOS_MODE=${CHAOS_NOTIFICATION:-false}]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      <<: *hc-defaults
+    networks: [neuralops]
+
+  # ── Metrics Exporter ─────────────────────────────────────────────────────
+  metrics-exporter:
+    build: streaming
+    depends_on:
+      kafka:
+        condition: service_healthy
+      prometheus:
+        condition: service_healthy
+    environment:
+      - PROMETHEUS_URL=http://prometheus:9090
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+    restart: on-failure
+    networks: [neuralops]
+
+  # ── Inference Server ─────────────────────────────────────────────────────
+  inference-server:
+    build: ml
+    ports: ["8080:8080"]
+    depends_on:
+      kafka:
+        condition: service_healthy
+      mlflow:
+        condition: service_healthy
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+    volumes:
+      - ./ml/artifacts:/app/artifacts:ro
+      - ./data:/app/data:ro
+    restart: on-failure
+    networks: [neuralops]
+
+  # ── Remediation Engine ───────────────────────────────────────────────────
+  remediation-engine:
+    build: remediation
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - INFERENCE_SERVER_URL=http://inference-server:8080
+      - AUDIT_LOG_PATH=/var/log/neuralops/remediation_audit.jsonl
+    volumes:
+      - audit-log:/var/log/neuralops
+    restart: on-failure
+    networks: [neuralops]
+
+  # ── API Gateway ──────────────────────────────────────────────────────────
+  api-gateway:
+    build: frontend/api-gateway
+    ports: ["8090:8090"]
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    environment:
+      - PROMETHEUS_URL=http://prometheus:9090
+      - INFERENCE_SERVER_URL=http://inference-server:8080
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - AUDIT_LOG_PATH=/var/log/neuralops/remediation_audit.jsonl
+      - REPORT_OUTPUT_DIR=/reports
+    volumes:
+      - audit-log:/var/log/neuralops:ro
+      - drift-reports:/reports:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8090/health"]
+      <<: *hc-defaults
+    networks: [neuralops]
+
+  # ── Frontend Dashboard ───────────────────────────────────────────────────
+  frontend:
+    build: frontend
+    ports: ["3001:80"]
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    networks: [neuralops]
+
+volumes:
+  grafana-data:
+  mlflow-data:
+  loki-data:
+  audit-log:
+  drift-reports:
+
+networks:
+  neuralops:
+    driver: bridge

@@ -1,0 +1,8 @@
+evidently==0.4.22
+pandas==2.2.2
+numpy==1.26.4
+requests==2.31.0
+mlflow==2.12.2
+torch==2.2.2
+scikit-learn==1.4.2
+python-dotenv==1.0.1

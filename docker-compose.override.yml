@@ -1,0 +1,22 @@
+# Local development overrides
+# Automatically applied when running: docker-compose -f docker-compose.full.yml up
+# Mount source code for hot-reload without rebuilding images
+
+version: "3.9"
+
+services:
+  # Hot-reload for API gateway during development
+  api-gateway:
+    volumes:
+      - ./frontend/api-gateway:/app
+    command: uvicorn main:app --host 0.0.0.0 --port 8090 --reload
+
+  # Expose MLflow on host for direct access
+  mlflow:
+    ports:
+      - "5000:5000"
+
+  # Reduce Kafka log noise in dev
+  kafka:
+    environment:
+      KAFKA_LOG4J_LOGGERS: "kafka=WARN,kafka.controller=WARN,kafka.log.LogCleaner=WARN,state.change.logger=WARN,kafka.producer.async.DefaultEventHandler=WARN"

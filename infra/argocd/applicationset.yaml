@@ -1,0 +1,49 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: neuralops-environments
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          - env: dev
+            namespace: neuralops-dev
+            valuesFile: values-dev.yaml
+            autoSync: "true"
+            selfHeal: "true"
+          - env: staging
+            namespace: neuralops-staging
+            valuesFile: values-staging.yaml
+            autoSync: "true"
+            selfHeal: "true"
+          - env: prod
+            namespace: neuralops
+            valuesFile: values.yaml
+            autoSync: "true"
+            selfHeal: "true"
+
+  template:
+    metadata:
+      name: "neuralops-{{env}}"
+      namespace: argocd
+    spec:
+      project: neuralops
+      source:
+        repoURL: https://github.com/Aashish-Chandr/neuralops
+        targetRevision: main
+        path: infra/helm/neuralops
+        helm:
+          valueFiles:
+            - "{{valuesFile}}"
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: "{{namespace}}"
+      syncPolicy:
+        automated:
+          prune: "{{autoSync}}"
+          selfHeal: "{{selfHeal}}"
+        syncOptions:
+          - CreateNamespace=true
+          - PrunePropagationPolicy=foreground
+

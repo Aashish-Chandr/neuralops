@@ -1,0 +1,45 @@
+{
+  "feature_names": [
+    "cpu_usage_percent",
+    "memory_usage_percent",
+    "latency_p99_ms",
+    "error_rate_percent",
+    "requests_per_second"
+  ],
+  "normal_shape": [
+    5000,
+    60,
+    5
+  ],
+  "anomaly_shape": [
+    1000,
+    60,
+    5
+  ],
+  "seq_len": 60,
+  "n_features": 5,
+  "normal_seed": 42,
+  "anomaly_seed": 99,
+  "stats": {
+    "cpu_usage_percent": {
+      "min": 9.111688613891602,
+      "max": 43.79683303833008
+    },
+    "memory_usage_percent": {
+      "min": 27.225170135498047,
+      "max": 49.21641540527344
+    },
+    "latency_p99_ms": {
+      "min": 26.771873474121094,
+      "max": 140.43377685546875
+    },
+    "error_rate_percent": {
+      "min": 3.933645348297432e-05,
+      "max": 1.9999957084655762
+    },
+    "requests_per_second": {
+      "min": 32.05605697631836,
+      "max": 88.96324920654297
+    }
+  }
+}

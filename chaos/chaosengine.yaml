@@ -1,0 +1,21 @@
+# Master chaos schedule — runs all experiments in sequence
+# Apply with: kubectl apply -f chaos/
+# Install LitmusChaos first: helm install litmuschaos litmuschaos/litmus --namespace litmus --create-namespace
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosSchedule
+metadata:
+  name: neuralops-chaos-schedule
+  namespace: neuralops
+spec:
+  schedule:
+    now: true
+  engineTemplateSpec:
+    appinfo:
+      appns: neuralops
+      applabel: "app=payment-service"
+      appkind: deployment
+    chaosServiceAccount: litmus-admin
+    experiments:
+      - name: pod-delete
+      - name: pod-network-latency
+      - name: pod-cpu-hog

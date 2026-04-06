@@ -1,0 +1,41 @@
+version: "3.9"
+
+# Add to your main docker-compose with:
+#   docker-compose -f docker-compose.full.yml -f monitoring/loki/docker-compose-loki.yml up
+
+services:
+  loki:
+    image: grafana/loki:2.9.7
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./loki-config.yaml:/etc/loki/local-config.yaml:ro
+      - loki-data:/tmp/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - neuralops
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --tries=1 -O- http://localhost:3100/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  promtail:
+    image: grafana/promtail:2.9.7
+    volumes:
+      - ./promtail-config.yaml:/etc/promtail/config.yaml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: -config.file=/etc/promtail/config.yaml
+    depends_on:
+      loki:
+        condition: service_healthy
+    networks:
+      - neuralops
+
+volumes:
+  loki-data:
+
+networks:
+  neuralops:
+    external: true

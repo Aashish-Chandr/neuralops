@@ -1,0 +1,32 @@
+prometheus:
+  prometheusSpec:
+    additionalScrapeConfigs:
+      - job_name: neuralops-services
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [neuralops]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: "true"
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+
+grafana:
+  enabled: true
+  adminPassword: neuralops-admin
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: neuralops
+          orgId: 1
+          folder: NeuralOps
+          type: file
+          options:
+            path: /var/lib/grafana/dashboards/neuralops
+  dashboardsConfigMaps:
+    neuralops: neuralops-grafana-dashboards

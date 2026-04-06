@@ -1,0 +1,18 @@
+# Install Argo Rollouts controller
+# kubectl apply -f https://github.com/argoproj/argo-rollouts/releases/latest/download/install.yaml
+# Or via Helm:
+#   helm install argo-rollouts argo-rollouts/argo-rollouts -n argo-rollouts --create-namespace
+#
+# This file documents the install command for GitOps tracking.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argo-rollouts-install-notes
+  namespace: argo-rollouts
+data:
+  install-command: |
+    helm repo add argo-rollouts https://argoproj.github.io/argo-helm
+    helm install argo-rollouts argo-rollouts/argo-rollouts \
+      --namespace argo-rollouts \
+      --create-namespace \
+      --set dashboard.enabled=true

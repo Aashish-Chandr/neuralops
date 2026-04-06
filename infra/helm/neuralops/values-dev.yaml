@@ -1,0 +1,18 @@
+# Dev overrides — lower resources, chaos enabled on payment for testing
+global:
+  tag: develop
+
+services:
+  paymentService:
+    chaosMode: "true"
+    replicas: 1
+
+inferenceServer:
+  replicas: 1
+
+remediationEngine:
+  replicas: 1
+
+driftDetector:
+  schedule: "*/30 * * * *"   # every 30 min in dev
+  driftThreshold: "0.5"       # more lenient in dev

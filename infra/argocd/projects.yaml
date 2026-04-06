@@ -1,0 +1,43 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: neuralops
+  namespace: argocd
+spec:
+  description: NeuralOps AIOps Platform
+
+  sourceRepos:
+    - https://github.com/Aashish-Chandr/neuralops
+
+  destinations:
+    - namespace: neuralops
+      server: https://kubernetes.default.svc
+    - namespace: neuralops-dev
+      server: https://kubernetes.default.svc
+    - namespace: neuralops-staging
+      server: https://kubernetes.default.svc
+
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
+
+  roles:
+    - name: developer
+      description: Read-only access for developers
+      policies:
+        - p, proj:neuralops:developer, applications, get, neuralops/*, allow
+        - p, proj:neuralops:developer, applications, sync, neuralops/*-dev, allow
+      groups:
+        - neuralops-developers
+
+    - name: ops
+      description: Full access for ops team
+      policies:
+        - p, proj:neuralops:ops, applications, *, neuralops/*, allow
+      groups:
+        - neuralops-ops
+

@@ -1,0 +1,78 @@
+groups:
+  - name: neuralops.services
+    interval: 30s
+    rules:
+      - alert: ServiceHighErrorRate
+        expr: error_rate_percent > 20
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate on {{ $labels.service }}"
+          description: "Error rate is {{ $value | printf \"%.1f\" }}% (threshold: 20%)"
+
+      - alert: ServiceCriticalErrorRate
+        expr: error_rate_percent > 40
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical error rate on {{ $labels.service }}"
+          description: "Error rate is {{ $value | printf \"%.1f\" }}% — service may be down"
+
+      - alert: ServiceHighCPU
+        expr: cpu_usage_percent > 85
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU on {{ $labels.service }}"
+          description: "CPU at {{ $value | printf \"%.1f\" }}%"
+
+      - alert: ServiceHighLatency
+        expr: histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[2m])) * 1000 > 1000
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High P99 latency on {{ $labels.service }}"
+          description: "P99 latency is {{ $value | printf \"%.0f\" }}ms"
+
+      - alert: ServiceDown
+        expr: up == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service {{ $labels.job }} is down"
+          description: "Prometheus cannot scrape {{ $labels.job }}"
+
+  - name: neuralops.ml
+    interval: 30s
+    rules:
+      - alert: AnomalyDetected
+        expr: anomaly_score > 0.05
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Anomaly detected on {{ $labels.service }}"
+          description: "Anomaly score {{ $value | printf \"%.4f\" }} exceeds threshold 0.05"
+
+      - alert: HighAnomalyScore
+        expr: anomaly_score > 0.10
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical anomaly on {{ $labels.service }}"
+          description: "Anomaly score {{ $value | printf \"%.4f\" }} — remediation should have fired"
+
+      - alert: InferenceServerDown
+        expr: absent(predictions_total)
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Inference server is not producing predictions"
+          description: "No predictions_total metric seen for 2 minutes"

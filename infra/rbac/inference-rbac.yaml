@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: inference-server
+  namespace: neuralops
+---
+# Inference server needs no K8s API access — minimal role
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: inference-server
+  namespace: neuralops
+rules:
+  # Only needs to read its own ConfigMap for threshold/config
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get"]
+    resourceNames: ["inference-server-config"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: inference-server
+  namespace: neuralops
+subjects:
+  - kind: ServiceAccount
+    name: inference-server
+    namespace: neuralops
+roleRef:
+  kind: Role
+  name: inference-server
+  apiGroup: rbac.authorization.k8s.io

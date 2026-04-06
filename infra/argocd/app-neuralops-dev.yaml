@@ -1,0 +1,24 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: neuralops-dev
+  namespace: argocd
+spec:
+  project: neuralops
+  source:
+    repoURL: https://github.com/Aashish-Chandr/neuralops
+    targetRevision: develop
+    path: infra/helm/neuralops
+    helm:
+      valueFiles:
+        - values-dev.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: neuralops-dev
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+

@@ -1,0 +1,78 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: remediation-engine
+  namespace: {{ .Values.global.namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: remediation-engine
+  namespace: {{ .Values.global.namespace }}
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "deployments/scale"]
+    verbs: ["get", "list", "patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: remediation-engine
+  namespace: {{ .Values.global.namespace }}
+subjects:
+  - kind: ServiceAccount
+    name: remediation-engine
+    namespace: {{ .Values.global.namespace }}
+roleRef:
+  kind: Role
+  name: remediation-engine
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: remediation-engine
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: remediation-engine
+spec:
+  replicas: {{ .Values.remediationEngine.replicas }}
+  selector:
+    matchLabels:
+      app: remediation-engine
+  template:
+    metadata:
+      labels:
+        app: remediation-engine
+    spec:
+      serviceAccountName: remediation-engine
+      containers:
+        - name: remediation-engine
+          image: {{ .Values.remediationEngine.image.repository }}:{{ .Values.remediationEngine.image.tag }}
+          env:
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: {{ .Values.kafka.bootstrapServers }}
+            - name: KAFKA_ALERTS_TOPIC
+              value: {{ .Values.kafka.alertsTopic }}
+            - name: K8S_NAMESPACE
+              value: {{ .Values.global.namespace }}
+            - name: INFERENCE_SERVER_URL
+              value: http://inference-server:{{ .Values.inferenceServer.port }}
+            - name: SLACK_WEBHOOK_URL
+              value: {{ .Values.slack.webhookUrl | quote }}
+          volumeMounts:
+            - name: audit-log
+              mountPath: /var/log/neuralops
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+      volumes:
+        - name: audit-log
+          emptyDir: {}

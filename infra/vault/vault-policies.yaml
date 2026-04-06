@@ -1,0 +1,45 @@
+# Vault policies — applied after vault is unsealed
+# vault policy write neuralops-inference - < inference-policy.hcl
+# vault policy write neuralops-remediation - < remediation-policy.hcl
+
+---
+# inference-policy.hcl
+# path "secret/data/neuralops/mlflow" {
+#   capabilities = ["read"]
+# }
+# path "secret/data/neuralops/kafka" {
+#   capabilities = ["read"]
+# }
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vault-policies
+  namespace: vault
+data:
+  inference-policy.hcl: |
+    # Inference server can only read MLflow and Kafka credentials
+    path "secret/data/neuralops/mlflow" {
+      capabilities = ["read"]
+    }
+    path "secret/data/neuralops/kafka" {
+      capabilities = ["read"]
+    }
+
+  remediation-policy.hcl: |
+    # Remediation engine can read Kafka creds and Slack webhook
+    path "secret/data/neuralops/kafka" {
+      capabilities = ["read"]
+    }
+    path "secret/data/neuralops/slack" {
+      capabilities = ["read"]
+    }
+
+  drift-policy.hcl: |
+    # Drift detector can read Prometheus and MLflow creds
+    path "secret/data/neuralops/prometheus" {
+      capabilities = ["read"]
+    }
+    path "secret/data/neuralops/mlflow" {
+      capabilities = ["read"]
+    }

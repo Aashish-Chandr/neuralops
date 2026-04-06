@@ -1,0 +1,70 @@
+global:
+  registry: ghcr.io/Aashish-Chandr/neuralops
+  tag: latest
+  namespace: neuralops
+
+kafka:
+  bootstrapServers: kafka:9092
+  metricsTopic: metrics-stream
+  alertsTopic: anomaly-alerts
+
+prometheus:
+  url: http://prometheus-server:9090
+
+mlflow:
+  trackingUri: http://mlflow:5000
+  modelName: neuralops-lstm-autoencoder
+  modelStage: Production
+
+services:
+  userService:
+    port: 8000
+    chaosMode: "false"
+    replicas: 1
+  orderService:
+    port: 8000
+    chaosMode: "false"
+    replicas: 1
+  paymentService:
+    port: 8000
+    chaosMode: "false"
+    replicas: 1
+  inventoryService:
+    port: 8000
+    chaosMode: "false"
+    replicas: 1
+  notificationService:
+    port: 8000
+    chaosMode: "false"
+    replicas: 1
+
+inferenceServer:
+  replicas: 1
+  port: 8080
+  image:
+    repository: ghcr.io/Aashish-Chandr/neuralops/inference-server
+    tag: latest
+
+remediationEngine:
+  replicas: 1
+  image:
+    repository: ghcr.io/Aashish-Chandr/neuralops/remediation-engine
+    tag: latest
+
+metricsExporter:
+  replicas: 1
+  scrapeIntervalSeconds: 15
+  image:
+    repository: ghcr.io/Aashish-Chandr/neuralops/metrics-exporter
+    tag: latest
+
+driftDetector:
+  schedule: "0 2 * * *"   # daily at 2 AM
+  driftThreshold: "0.3"
+  image:
+    repository: ghcr.io/Aashish-Chandr/neuralops/drift-detector
+    tag: latest
+
+slack:
+  webhookUrl: ""
+

@@ -1,0 +1,22 @@
+# KEDA ScaledObject: scale inference-server based on Kafka consumer lag
+# When metrics-stream has a large backlog, spin up more inference pods
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: inference-server-scaler
+  namespace: neuralops
+spec:
+  scaleTargetRef:
+    name: inference-server
+  minReplicaCount: 1
+  maxReplicaCount: 8
+  cooldownPeriod: 60
+  pollingInterval: 15
+  triggers:
+    - type: kafka
+      metadata:
+        bootstrapServers: kafka.neuralops:9092
+        consumerGroup: ml-inference-consumer
+        topic: metrics-stream
+        lagThreshold: "50"          # scale up when lag > 50 messages per replica
+        offsetResetPolicy: latest

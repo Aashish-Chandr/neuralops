@@ -1,0 +1,61 @@
+# Enable Kubernetes auth method in Vault
+# Run these commands after vault is deployed:
+#
+# vault auth enable kubernetes
+# vault write auth/kubernetes/config \
+#   kubernetes_host="https://$KUBERNETES_PORT_443_TCP_ADDR:443" \
+#   token_reviewer_jwt="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
+#   kubernetes_ca_cert=@/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+#
+# vault write auth/kubernetes/role/inference-server \
+#   bound_service_account_names=inference-server \
+#   bound_service_account_namespaces=neuralops \
+#   policies=neuralops-inference \
+#   ttl=1h
+#
+# vault write auth/kubernetes/role/remediation-engine \
+#   bound_service_account_names=remediation-engine \
+#   bound_service_account_namespaces=neuralops \
+#   policies=neuralops-remediation \
+#   ttl=1h
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vault-auth-setup
+  namespace: vault
+data:
+  setup.sh: |
+    #!/bin/sh
+    set -e
+    vault auth enable kubernetes
+
+    vault write auth/kubernetes/config \
+      kubernetes_host="https://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT}" \
+      token_reviewer_jwt="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
+      kubernetes_ca_cert=@/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+
+    vault write auth/kubernetes/role/inference-server \
+      bound_service_account_names=inference-server \
+      bound_service_account_namespaces=neuralops \
+      policies=neuralops-inference \
+      ttl=1h
+
+    vault write auth/kubernetes/role/remediation-engine \
+      bound_service_account_names=remediation-engine \
+      bound_service_account_namespaces=neuralops \
+      policies=neuralops-remediation \
+      ttl=1h
+
+    vault write auth/kubernetes/role/drift-detector \
+      bound_service_account_names=drift-detector \
+      bound_service_account_namespaces=neuralops \
+      policies=neuralops-drift \
+      ttl=1h
+
+    # Write initial secrets
+    vault kv put secret/neuralops/kafka bootstrap_servers="kafka:9092"
+    vault kv put secret/neuralops/mlflow tracking_uri="http://mlflow:5000"
+    vault kv put secret/neuralops/slack webhook_url=""
+
+    echo "Vault auth configured successfully"

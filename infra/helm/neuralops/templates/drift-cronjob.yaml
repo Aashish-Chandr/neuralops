@@ -1,0 +1,37 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: drift-detector
+  namespace: {{ .Values.global.namespace }}
+spec:
+  schedule: {{ .Values.driftDetector.schedule | quote }}
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: drift-detector
+              image: {{ .Values.driftDetector.image.repository }}:{{ .Values.driftDetector.image.tag }}
+              env:
+                - name: PROMETHEUS_URL
+                  value: {{ .Values.prometheus.url }}
+                - name: MLFLOW_TRACKING_URI
+                  value: {{ .Values.mlflow.trackingUri }}
+                - name: DRIFT_THRESHOLD
+                  value: {{ .Values.driftDetector.driftThreshold | quote }}
+                - name: REPORT_OUTPUT_DIR
+                  value: /reports
+              volumeMounts:
+                - name: reports
+                  mountPath: /reports
+              resources:
+                requests:
+                  cpu: "200m"
+                  memory: "512Mi"
+                limits:
+                  cpu: "1000m"
+                  memory: "2Gi"
+          volumes:
+            - name: reports
+              emptyDir: {}

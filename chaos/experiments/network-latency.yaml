@@ -1,0 +1,43 @@
+apiVersion: litmuschaos.io/v1alpha1
+kind: ChaosEngine
+metadata:
+  name: payment-network-latency
+  namespace: neuralops
+spec:
+  appinfo:
+    appns: neuralops
+    applabel: "app=payment-service"
+    appkind: deployment
+  chaosServiceAccount: litmus-admin
+  monitoring: true
+  jobCleanUpPolicy: retain
+  experiments:
+    - name: pod-network-latency
+      spec:
+        components:
+          env:
+            - name: TOTAL_CHAOS_DURATION
+              value: "120"
+            - name: NETWORK_LATENCY
+              value: "500"         # 500ms added latency
+            - name: JITTER
+              value: "50"          # ±50ms jitter
+            - name: CONTAINER_RUNTIME
+              value: docker
+            - name: SOCKET_PATH
+              value: /var/run/docker.sock
+        probe:
+          - name: latency-anomaly-detected
+            type: promProbe
+            promProbe/inputs:
+              endpoint: http://prometheus:9090
+              query: "anomaly_score{service=\"payment-service\"} > 0.05"
+              comparator:
+                type: float
+                criteria: ">"
+                value: "0"
+            mode: Edge
+            runProperties:
+              probeTimeout: 30
+              interval: 15
+              retry: 2

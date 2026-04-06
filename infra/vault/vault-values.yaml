@@ -1,0 +1,35 @@
+# Helm values for HashiCorp Vault deployment
+# helm repo add hashicorp https://helm.releases.hashicorp.com
+# helm install vault hashicorp/vault -n vault --create-namespace -f vault-values.yaml
+
+global:
+  enabled: true
+  tlsDisable: false
+
+server:
+  ha:
+    enabled: false   # set true for production HA
+  dataStorage:
+    enabled: true
+    size: 10Gi
+    storageClass: standard
+  auditStorage:
+    enabled: true
+    size: 5Gi
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 250m
+    limits:
+      memory: 512Mi
+      cpu: 500m
+
+injector:
+  enabled: true
+  resources:
+    requests:
+      memory: 64Mi
+      cpu: 50m
+    limits:
+      memory: 128Mi
+      cpu: 250m

@@ -1,0 +1,89 @@
+{
+  "title": "NeuralOps — Remediation Timeline",
+  "uid": "neuralops-remediation",
+  "schemaVersion": 38,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1, "type": "stat",
+      "title": "Total Remediations (24h)",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "expr": "increase(remediation_actions_total[24h])" }],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "id": 2, "type": "stat",
+      "title": "Successful Recoveries",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "expr": "increase(remediation_success_total[24h])" }],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{"color":"red","value":0},{"color":"green","value":1}] }
+        }
+      }
+    },
+    {
+      "id": 3, "type": "stat",
+      "title": "Escalations (human needed)",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "expr": "increase(remediation_escalations_total[24h])" }],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{"color":"green","value":0},{"color":"red","value":1}] }
+        }
+      }
+    },
+    {
+      "id": 4, "type": "stat",
+      "title": "Avg Recovery Time (min)",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "expr": "avg(remediation_recovery_duration_seconds) / 60" }],
+      "fieldConfig": { "defaults": { "unit": "m" } }
+    },
+    {
+      "id": 5, "type": "timeseries",
+      "title": "Remediation Actions Over Time",
+      "gridPos": { "x": 0, "y": 4, "w": 16, "h": 8 },
+      "targets": [
+        { "expr": "increase(remediation_actions_total{action=\"restart\"}[5m])",   "legendFormat": "pod restart" },
+        { "expr": "increase(remediation_actions_total{action=\"scale_up\"}[5m])",  "legendFormat": "scale up" },
+        { "expr": "increase(remediation_actions_total{action=\"rollback\"}[5m])",  "legendFormat": "rollback" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short", "min": 0 } }
+    },
+    {
+      "id": 6, "type": "piechart",
+      "title": "Action Distribution",
+      "gridPos": { "x": 16, "y": 4, "w": 8, "h": 8 },
+      "targets": [
+        { "expr": "sum(remediation_actions_total{action=\"restart\"})",  "legendFormat": "restart" },
+        { "expr": "sum(remediation_actions_total{action=\"scale_up\"})", "legendFormat": "scale up" },
+        { "expr": "sum(remediation_actions_total{action=\"rollback\"})", "legendFormat": "rollback" }
+      ]
+    },
+    {
+      "id": 7, "type": "logs",
+      "title": "Remediation Engine Audit Log (live)",
+      "gridPos": { "x": 0, "y": 12, "w": 24, "h": 10 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [{
+        "expr": "{app=\"remediation-engine\"} |= \"AUDIT\"",
+        "legendFormat": ""
+      }],
+      "options": { "showTime": true, "showLabels": true, "wrapLogMessage": true }
+    },
+    {
+      "id": 8, "type": "timeseries",
+      "title": "Anomaly Score Before/After Remediation — payment-service",
+      "description": "Shows score dropping after engine acts",
+      "gridPos": { "x": 0, "y": 22, "w": 24, "h": 8 },
+      "targets": [
+        { "expr": "anomaly_score{service=\"payment-service\"}", "legendFormat": "anomaly score" },
+        { "expr": "0.05", "legendFormat": "threshold" }
+      ]
+    }
+  ]
+}
