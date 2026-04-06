@@ -1,7 +1,18 @@
 """
-Model Drift Detector using Evidently AI.
-Runs daily (via Kubernetes CronJob) to compare training vs production distributions.
-Triggers retraining if drift exceeds threshold.
+Model drift detector. Runs daily as a Kubernetes CronJob.
+
+Compares the distribution of metrics the model was trained on against what
+it's seeing in production over the last 24 hours. If enough features have
+drifted (KS test, configured threshold), it triggers a retrain.
+
+Why Evidently? It's purpose-built for this. The alternative is writing your
+own statistical tests, which is fine but Evidently handles edge cases (small
+samples, constant features, etc.) that you'd have to deal with yourself.
+
+One thing to be careful about: drift detection can trigger retraining on
+legitimate traffic changes (e.g. a product launch doubles your RPS). The
+retrain pipeline handles this by only promoting the new model if F1 improves —
+so a false drift trigger just wastes compute, it doesn't break production.
 """
 import os
 import json
@@ -13,61 +24,70 @@ import requests
 from datetime import datetime, timedelta, timezone
 from evidently.report import Report
 from evidently.metric_preset import DataDriftPreset, DataQualityPreset
-from evidently.metrics import ColumnDriftMetric
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("drift-detector")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
-PROMETHEUS_URL      = os.getenv("PROMETHEUS_URL",       "http://prometheus:9090")
-DRIFT_THRESHOLD     = float(os.getenv("DRIFT_THRESHOLD", "0.3"))   # fraction of drifted features
-REPORT_OUTPUT_DIR   = os.getenv("REPORT_OUTPUT_DIR",    "/reports")
-RETRAIN_SCRIPT      = os.getenv("RETRAIN_SCRIPT",       "/app/retrain.py")
-MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI",  "http://mlflow:5000")
+PROMETHEUS_URL    = os.getenv("PROMETHEUS_URL",       "http://prometheus:9090")
+DRIFT_THRESHOLD   = float(os.getenv("DRIFT_THRESHOLD", "0.3"))
+REPORT_OUTPUT_DIR = os.getenv("REPORT_OUTPUT_DIR",    "/reports")
+RETRAIN_SCRIPT    = os.getenv("RETRAIN_SCRIPT",       "/app/retrain.py")
 
-FEATURE_NAMES = ["cpu_usage_percent", "memory_usage_percent", "request_latency_p99",
-                 "error_rate_percent", "requests_per_second"]
+FEATURES = [
+    "cpu_usage_percent",
+    "memory_usage_percent",
+    "request_latency_p99",
+    "error_rate_percent",
+    "requests_per_second",
+]
 
-SERVICES = ["user-service", "order-service", "payment-service", "inventory-service", "notification-service"]
+SERVICES = [
+    "user-service", "order-service", "payment-service",
+    "inventory-service", "notification-service",
+]
 
 
-def fetch_prometheus_range(query: str, hours: int = 24) -> list[float]:
+def fetch_range(query: str, hours: int = 24) -> list[float]:
     end   = datetime.now(timezone.utc)
     start = end - timedelta(hours=hours)
     try:
         resp = requests.get(f"{PROMETHEUS_URL}/api/v1/query_range", params={
-            "query": query, "start": start.timestamp(),
-            "end": end.timestamp(), "step": "60",
+            "query": query,
+            "start": start.timestamp(),
+            "end":   end.timestamp(),
+            "step":  "60",
         }, timeout=10)
         results = resp.json().get("data", {}).get("result", [])
         if results:
             return [float(v[1]) for v in results[0]["values"]]
     except Exception as e:
-        log.warning(f"Prometheus query failed: {e}")
+        log.warning(f"prometheus range query failed: {e}")
     return []
 
 
 def build_production_df() -> pd.DataFrame:
-    """Fetch last 24h of production metrics from Prometheus."""
     rows = []
     for svc in SERVICES:
-        cpu_vals = fetch_prometheus_range(f'cpu_usage_percent{{service="{svc}"}}')
-        mem_vals = fetch_prometheus_range(f'memory_usage_percent{{service="{svc}"}}')
-        lat_vals = fetch_prometheus_range(f'histogram_quantile(0.99, rate(http_request_duration_seconds_bucket{{service="{svc}"}}[5m]))')
-        err_vals = fetch_prometheus_range(f'error_rate_percent{{service="{svc}"}}')
-        rps_vals = fetch_prometheus_range(f'requests_per_second{{service="{svc}"}}')
+        cpu  = fetch_range(f'cpu_usage_percent{{service="{svc}"}}')
+        mem  = fetch_range(f'memory_usage_percent{{service="{svc}"}}')
+        lat  = fetch_range(f'histogram_quantile(0.99, rate(http_request_duration_seconds_bucket{{service="{svc}"}}[5m]))')
+        err  = fetch_range(f'error_rate_percent{{service="{svc}"}}')
+        rps  = fetch_range(f'requests_per_second{{service="{svc}"}}')
 
-        n = min(len(cpu_vals), len(mem_vals), len(lat_vals), len(err_vals), len(rps_vals))
+        n = min(len(cpu), len(mem), len(lat), len(err), len(rps))
         for i in range(n):
             rows.append({
-                "cpu_usage_percent":    cpu_vals[i],
-                "memory_usage_percent": mem_vals[i],
-                "request_latency_p99":  lat_vals[i] * 1000 if lat_vals[i] < 100 else lat_vals[i],
-                "error_rate_percent":   err_vals[i],
-                "requests_per_second":  rps_vals[i],
+                "cpu_usage_percent":    cpu[i],
+                "memory_usage_percent": mem[i],
+                # Prometheus returns latency in seconds, convert to ms
+                "request_latency_p99":  lat[i] * 1000 if lat[i] < 100 else lat[i],
+                "error_rate_percent":   err[i],
+                "requests_per_second":  rps[i],
             })
 
     if not rows:
-        log.warning("No production data fetched — generating synthetic fallback")
+        # no production data yet — use synthetic fallback so the job doesn't fail
+        log.warning("no production data from prometheus, using synthetic fallback")
         rng = np.random.default_rng(0)
         rows = [{
             "cpu_usage_percent":    float(rng.uniform(15, 30)),
@@ -81,9 +101,9 @@ def build_production_df() -> pd.DataFrame:
 
 
 def build_reference_df() -> pd.DataFrame:
-    """Build reference dataset from training distribution parameters."""
+    """Reconstruct the training distribution from known parameters."""
     rng = np.random.default_rng(42)
-    n = 1000
+    n   = 1000
     return pd.DataFrame({
         "cpu_usage_percent":    rng.normal(20, 8, n).clip(5, 95),
         "memory_usage_percent": rng.normal(35, 6, n).clip(10, 95),
@@ -98,66 +118,77 @@ def run_drift_report(reference: pd.DataFrame, current: pd.DataFrame) -> dict:
     report.run(reference_data=reference, current_data=current)
 
     os.makedirs(REPORT_OUTPUT_DIR, exist_ok=True)
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    report_path = os.path.join(REPORT_OUTPUT_DIR, f"drift_report_{ts}.html")
+    ts          = datetime.now().strftime("%Y%m%d_%H%M%S")
+    report_path = os.path.join(REPORT_OUTPUT_DIR, f"drift_{ts}.html")
     report.save_html(report_path)
-    log.info(f"Drift report saved to {report_path}")
+    log.info(f"report saved to {report_path}")
 
-    result = report.as_dict()
-    drift_metrics = result.get("metrics", [])
-
+    result_dict      = report.as_dict()
     drifted_features = 0
-    total_features = 0
-    for m in drift_metrics:
+    total_features   = len(FEATURES)
+
+    for m in result_dict.get("metrics", []):
         if m.get("metric") == "DatasetDriftMetric":
-            result_data = m.get("result", {})
-            drifted_features = result_data.get("number_of_drifted_columns", 0)
-            total_features   = result_data.get("number_of_columns", len(FEATURE_NAMES))
+            rd = m.get("result", {})
+            drifted_features = rd.get("number_of_drifted_columns", 0)
+            total_features   = rd.get("number_of_columns", total_features)
             break
 
     drift_fraction = drifted_features / max(total_features, 1)
-    log.info(f"Drift: {drifted_features}/{total_features} features drifted ({drift_fraction:.2%})")
-    return {"drift_fraction": drift_fraction, "drifted_features": drifted_features, "report_path": report_path}
+    log.info(f"drift: {drifted_features}/{total_features} features ({drift_fraction:.1%})")
+
+    return {
+        "drift_fraction":   drift_fraction,
+        "drifted_features": drifted_features,
+        "report_path":      report_path,
+    }
 
 
 def trigger_retraining():
-    log.info("Drift threshold exceeded — triggering retraining pipeline...")
+    log.info("triggering retraining pipeline...")
     try:
         result = subprocess.run(
             ["python", RETRAIN_SCRIPT],
-            capture_output=True, text=True, timeout=3600
+            capture_output=True, text=True, timeout=3600,
         )
         if result.returncode == 0:
-            log.info("Retraining completed successfully")
+            log.info("retraining completed")
             log.info(result.stdout[-2000:])
         else:
-            log.error(f"Retraining failed:\n{result.stderr[-2000:]}")
+            log.error(f"retraining failed:\n{result.stderr[-2000:]}")
     except Exception as e:
-        log.error(f"Failed to trigger retraining: {e}")
+        log.error(f"failed to start retraining: {e}")
 
 
 def main():
-    log.info("Starting drift detection run...")
-    reference_df  = build_reference_df()
-    production_df = build_production_df()
+    log.info("starting drift detection run")
+    reference = build_reference_df()
+    current   = build_production_df()
 
-    log.info(f"Reference samples: {len(reference_df)} | Production samples: {len(production_df)}")
-    drift_result = run_drift_report(reference_df, production_df)
+    log.info(f"reference={len(reference)} rows  current={len(current)} rows")
+    result = run_drift_report(reference, current)
 
     summary = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "drift_fraction": drift_result["drift_fraction"],
-        "drifted_features": drift_result["drifted_features"],
-        "threshold": DRIFT_THRESHOLD,
-        "action": "none",
+        "timestamp":        datetime.now(timezone.utc).isoformat(),
+        "drift_fraction":   result["drift_fraction"],
+        "drifted_features": result["drifted_features"],
+        "threshold":        DRIFT_THRESHOLD,
+        "action":           "none",
     }
 
-    if drift_result["drift_fraction"] >= DRIFT_THRESHOLD:
-        log.warning(f"Drift {drift_result['drift_fraction']:.2%} >= threshold {DRIFT_THRESHOLD:.2%} — retraining")
+    if result["drift_fraction"] >= DRIFT_THRESHOLD:
+        log.warning(f"drift {result['drift_fraction']:.1%} >= threshold {DRIFT_THRESHOLD:.1%} — retraining")
         summary["action"] = "retrain_triggered"
         trigger_retraining()
     else:
-        log.info(f"Drift {drift_result['drift_fraction']:.2%} < threshold — no action needed")
+        log.info(f"drift {result['drift_fraction']:.1%} < threshold — no action")
+
+    # write summary as JSON so the API gateway can read it
+    ts          = datetime.now().strftime("%Y%m%d_%H%M%S")
+    summary_path = os.path.join(REPORT_OUTPUT_DIR, f"drift_{ts}.json")
+    os.makedirs(REPORT_OUTPUT_DIR, exist_ok=True)
+    with open(summary_path, "w") as f:
+        json.dump(summary, f, indent=2)
 
     print(json.dumps(summary, indent=2))
 

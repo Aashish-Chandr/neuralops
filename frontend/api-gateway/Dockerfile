@@ -4,12 +4,12 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY main.py .
 
-ENV PROMETHEUS_URL=http://prometheus.railway.internal:9090
-ENV INFERENCE_SERVER_URL=http://inference-server.railway.internal:8080
-ENV MLFLOW_TRACKING_URI=http://mlflow.railway.internal:5000
-ENV AUDIT_LOG_PATH=/data/remediation_audit.jsonl
-ENV REPORT_OUTPUT_DIR=/data/reports
-ENV CHAOS_STATE_PATH=/data/chaos_state.json
+# Render and Railway both inject $PORT at runtime
+# Defaults make local docker-compose work without changes
+ENV PROMETHEUS_URL=""
+ENV MLFLOW_TRACKING_URI=""
+ENV AUDIT_LOG_PATH=/tmp/remediation_audit.jsonl
+ENV REPORT_OUTPUT_DIR=/tmp/reports
+ENV CHAOS_STATE_PATH=/tmp/chaos_state.json
 
-# Railway injects $PORT
 CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8090}"]

@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: neuralops-api-gateway
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: PROMETHEUS_URL
+        value: ""          # leave empty — Prometheus runs locally, not on Render
+      - key: MLFLOW_TRACKING_URI
+        value: ""          # set to your DagsHub MLflow URL
+      - key: AUDIT_LOG_PATH
+        value: /tmp/remediation_audit.jsonl
+      - key: REPORT_OUTPUT_DIR
+        value: /tmp/reports
+      - key: CHAOS_STATE_PATH
+        value: /tmp/chaos_state.json

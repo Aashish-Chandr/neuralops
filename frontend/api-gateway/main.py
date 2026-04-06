@@ -38,11 +38,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-PROMETHEUS_URL   = os.getenv("PROMETHEUS_URL",       "http://prometheus:9090")
-MLFLOW_URL       = os.getenv("MLFLOW_TRACKING_URI",  "http://mlflow:5000")
-AUDIT_LOG_PATH   = os.getenv("AUDIT_LOG_PATH",       "/var/log/neuralops/remediation_audit.jsonl")
+PROMETHEUS_URL   = os.getenv("PROMETHEUS_URL",       "")   # empty = no Prometheus (demo mode)
+MLFLOW_URL       = os.getenv("MLFLOW_TRACKING_URI",  "")   # empty = no MLflow (demo mode)
+AUDIT_LOG_PATH   = os.getenv("AUDIT_LOG_PATH",       "/tmp/remediation_audit.jsonl")
 CHAOS_STATE_PATH = os.getenv("CHAOS_STATE_PATH",     "/tmp/chaos_state.json")
-REPORT_DIR       = os.getenv("REPORT_OUTPUT_DIR",    "/reports")
+REPORT_DIR       = os.getenv("REPORT_OUTPUT_DIR",    "/tmp/reports")
 
 SERVICES = [
     "user-service", "order-service", "payment-service",
@@ -51,6 +51,8 @@ SERVICES = [
 
 
 def prom(q: str) -> float:
+    if not PROMETHEUS_URL:
+        return 0.0
     try:
         r = requests.get(f"{PROMETHEUS_URL}/api/v1/query", params={"query": q}, timeout=3)
         results = r.json().get("data", {}).get("result", [])
@@ -60,6 +62,8 @@ def prom(q: str) -> float:
 
 
 def prom_range(q: str, minutes: int = 60) -> list[dict]:
+    if not PROMETHEUS_URL:
+        return []
     try:
         end   = time.time()
         start = end - minutes * 60
@@ -217,6 +221,12 @@ def get_drift():
 
 @app.get("/model")
 def get_model():
+    if not MLFLOW_URL:
+        return {
+            "name": "neuralops-lstm-autoencoder", "version": "1",
+            "stage": "Production", "threshold": 0.05,
+            "f1_score": 0.891, "last_trained": "N/A",
+        }
     try:
         r = requests.get(
             f"{MLFLOW_URL}/api/2.0/mlflow/registered-models/get",

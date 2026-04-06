@@ -4,9 +4,10 @@ import type {
   DriftStatus, ModelInfo, SystemStats, ServiceTimeSeries
 } from './types'
 
-// On Railway the frontend and api-gateway are separate services.
-// VITE_API_URL is injected at build time via Railway service variables.
-// In local dev, vite proxies /api → localhost:8090 so this stays as '/api'.
+// VITE_API_URL is set at build time:
+//   - Vercel: set in project settings → Environment Variables
+//     VITE_API_URL = https://neuralops-api-gateway.onrender.com
+//   - Local dev: not set, so vite proxies /api → localhost:8090
 const BASE = import.meta.env.VITE_API_URL ?? '/api'
 
 const client = axios.create({ baseURL: BASE, timeout: 10000 })
