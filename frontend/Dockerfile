@@ -1,21 +1,19 @@
-# Stage 1: build React app
-FROM node:20-alpine AS builder
+# Stage 1: build
+# node:22-alpine ships with npm 10+ which handles lockfileVersion 3
+FROM node:22-alpine AS builder
 WORKDIR /app
-COPY package*.json ./
-RUN npm ci
+
+COPY package.json package-lock.json ./
+RUN npm ci --prefer-offline
+
 COPY . .
 RUN npm run build
 
 # Stage 2: serve with nginx
-# Railway injects $PORT — we use envsubst to inject it into nginx.conf at startup
 FROM nginx:alpine
-RUN apk add --no-cache bash
-
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/templates/default.conf.template
 
-# nginx official image runs envsubst on /etc/nginx/templates/*.template
-# and writes the result to /etc/nginx/conf.d/ before starting
 ENV PORT=80
 ENV API_GATEWAY_PORT=8090
 
