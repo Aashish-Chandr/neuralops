@@ -1,10 +1,12 @@
 # Stage 1: build
-# node:22-alpine ships with npm 10+ which handles lockfileVersion 3
 FROM node:22-alpine AS builder
 WORKDIR /app
 
-COPY package.json package-lock.json ./
-RUN npm ci --prefer-offline
+# Copy manifests and install — use npm install instead of npm ci
+# to avoid lockfile version incompatibilities between local npm 11
+# and whatever npm ships in the base image
+COPY package.json ./
+RUN npm install --legacy-peer-deps
 
 COPY . .
 RUN npm run build
